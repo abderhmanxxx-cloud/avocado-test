@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  MODERATOR
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELED
+  REFUNDED
+}
+
+enum RoutineVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String?
+  lastName      String?
+  avatarUrl     String?
+  role          UserRole  @default(CUSTOMER)
+  
+  // Loyalty & Rewards
+  avocadoPoints Int       @default(0)
+  avocadoBalance Float    @default(0.0)
+  referralCode  String    @unique @db.String(length: 20)
+  referredBy    String?   @relation("Referrals", fields: [referredBy], references: [id])
+  
+  // Security
+  mfaSecret     String?
+  mfaEnabled    Boolean   @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  orders        Order[]
+  wishlist      WishlistItem[]
+  routines      Routine[]
+  referrals     User[]    @relation("Referrals")
+  
+  @@index([email])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  price       Float
+  originalPrice Float?
+  discountPercent Int?
+  
+  // Images & Media
+  mainImage   String
+  images      String[]
+  
+  // Categories
+  category    String
+  subCategory String?
+  
+  // Inventory
+  stock       Int     @default(0)
+  sku         String  @unique
+  
+  // SEO
+  metaTitle   String?
+  metaDesc    String?
+  
+  // Status
+  isActive    Boolean @default(true)
+  isFeatured  Boolean @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  reviews     Review[]
+  orderItems  OrderItem[]
+  routines    RoutineProduct[]
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  image       String?
+  parentId    String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  products    Product[]
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  orderNumber String      @unique
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  
+  status      OrderStatus @default(PENDING)
+  subtotal    Float
+  tax         Float       @default(0.0)
+  shipping    Float       @default(0.0)
+  total       Float
+  
+  // Payment & Shipping
+  paymentMethod String?
+  shippingAddress Json?
+  
+  // Loyalty Points Applied
+  pointsUsed Int @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  items OrderItem[]
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  
+  quantity  Int
+  price     Float
+  
+  createdAt DateTime @default(now())
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  
+  rating    Int
+  title     String?
+  content   String?
+  isVerified Boolean @default(false)
+  
+  createdAt DateTime @default(now())
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  
+  createdAt DateTime @default(now())
+}
+
+model Routine {
+  id          String           @id @default(cuid())
+  slug        String           @unique
+  name        String
+  description String?
+  visibility  RoutineVisibility @default(PUBLIC)
+  
+  // Creator & Sharing
+  userId      String?
+  user        User?            @relation(fields: [userId], references: [id])
+  sharedLink  String?          @unique
+  
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  
+  products    RoutineProduct[]
+}
+
+model RoutineProduct {
+  id        String   @id @default(cuid())
+  routineId String
+  routine   Routine  @relation(fields: [routineId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  
+  order     Int      @default(0)
+}
+
+model StorefrontConfig {
+  id          String    @id @default(cuid())
+  version     Int       @default(1)
+  status      Draft | Published
+  
+  // Theme Tokens
+  themeTokens Json?
+  
+  // Header & Footer Settings
+  headerSettings Json?
+  footerSettings Json?
+  
+  // Page Sections (JSON Array of blocks)
+  sections    Json[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([status])
+}
+
+model Referral {
+  id        String   @id @default(cuid())
+  referrerId String
+  refereeId  String?
+  orderNumber String?
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([referrerId, orderNumber])
+}
+
+model AdminSession {
+  id          String   @id @default(cuid())
+  adminEmail  String
+  token       String   @unique
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+}
